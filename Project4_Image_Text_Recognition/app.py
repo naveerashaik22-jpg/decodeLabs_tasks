@@ -2,7 +2,11 @@ import streamlit as st
 import cv2
 import pytesseract
 import numpy as np
+import os
+import shutil
+
 from PIL import Image
+
 
 # ============================================================
 # PAGE CONFIGURATION
@@ -15,10 +19,29 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Tesseract location
-pytesseract.pytesseract.tesseract_cmd = (
-    r"C:\Program Files\Tesseract-OCR\tesseract.exe"
-)
+
+# ============================================================
+# TESSERACT CONFIGURATION
+# ============================================================
+
+# Automatically configure Tesseract for Windows and Linux.
+
+if os.name == "nt":
+
+    # Windows configuration
+    windows_path = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+
+    if os.path.exists(windows_path):
+        pytesseract.pytesseract.tesseract_cmd = windows_path
+
+else:
+
+    # Linux configuration (Streamlit Cloud)
+    tesseract_path = shutil.which("tesseract")
+
+    if tesseract_path:
+        pytesseract.pytesseract.tesseract_cmd = tesseract_path
+
 
 # ============================================================
 # CUSTOM CSS
@@ -80,6 +103,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+
 # ============================================================
 # HEADER
 # ============================================================
@@ -99,6 +123,7 @@ Upload an image → preprocess it → extract text using OCR
 
 </div>
 """, unsafe_allow_html=True)
+
 
 # ============================================================
 # SIDEBAR
@@ -130,6 +155,7 @@ with st.sidebar:
         "produce better OCR results."
     )
 
+
 # ============================================================
 # UPLOAD SECTION
 # ============================================================
@@ -145,6 +171,7 @@ uploaded_file = st.file_uploader(
     help="Supported formats: PNG, JPG and JPEG"
 )
 
+
 # ============================================================
 # MAIN PROCESSING
 # ============================================================
@@ -155,11 +182,12 @@ if uploaded_file is not None:
 
     image_array = np.array(image)
 
-    # Convert RGB → OpenCV
+    # Convert RGB to OpenCV BGR
     image_cv = cv2.cvtColor(
         image_array,
         cv2.COLOR_RGB2BGR
     )
+
 
     # ========================================================
     # ORIGINAL IMAGE
@@ -174,6 +202,7 @@ if uploaded_file is not None:
         image,
         use_container_width=True
     )
+
 
     # ========================================================
     # IMAGE INFORMATION
@@ -200,8 +229,9 @@ if uploaded_file is not None:
 
     st.divider()
 
+
     # ========================================================
-    # PREPROCESSING
+    # IMAGE PREPROCESSING
     # ========================================================
 
     st.markdown(
@@ -209,20 +239,26 @@ if uploaded_file is not None:
         unsafe_allow_html=True
     )
 
-    # Grayscale
+
+    # 1. Grayscale Conversion
+
     gray = cv2.cvtColor(
         image_cv,
         cv2.COLOR_BGR2GRAY
     )
 
-    # Gaussian Blur
+
+    # 2. Gaussian Blur
+
     blurred = cv2.GaussianBlur(
         gray,
         (5, 5),
         0
     )
 
-    # Threshold
+
+    # 3. Otsu Thresholding
+
     _, processed = cv2.threshold(
         blurred,
         0,
@@ -230,9 +266,13 @@ if uploaded_file is not None:
         cv2.THRESH_BINARY + cv2.THRESH_OTSU
     )
 
+
+    # Display preprocessing stages
+
     tab1, tab2, tab3 = st.tabs(
         ["⚫ Grayscale", "🌫️ Gaussian Blur", "⬜ Threshold"]
     )
+
 
     with tab1:
 
@@ -246,6 +286,7 @@ if uploaded_file is not None:
             use_container_width=True
         )
 
+
     with tab2:
 
         st.write(
@@ -258,6 +299,7 @@ if uploaded_file is not None:
             use_container_width=True
         )
 
+
     with tab3:
 
         st.write(
@@ -269,6 +311,7 @@ if uploaded_file is not None:
             processed,
             use_container_width=True
         )
+
 
     # ========================================================
     # OCR SECTION
@@ -286,24 +329,35 @@ if uploaded_file is not None:
         "from the processed image."
     )
 
+
     if st.button(
         "✨ Extract Text",
         use_container_width=True,
         type="primary"
     ):
 
-        with st.spinner("🔍 Analyzing image and recognizing text..."):
+        with st.spinner(
+            "🔍 Analyzing image and recognizing text..."
+        ):
 
             try:
+
+                # Check Tesseract availability
+
+                pytesseract.get_tesseract_version()
+
+
+                # Perform OCR
 
                 extracted_text = pytesseract.image_to_string(
                     processed,
                     config="--psm 6"
                 )
 
-                # ============================================
+
+                # =================================================
                 # RESULT
-                # ============================================
+                # =================================================
 
                 if extracted_text.strip():
 
@@ -330,9 +384,10 @@ if uploaded_file is not None:
                         unsafe_allow_html=True
                     )
 
-                    # ========================================
-                    # STATISTICS
-                    # ========================================
+
+                    # =============================================
+                    # RECOGNITION STATISTICS
+                    # =============================================
 
                     st.subheader("📊 Recognition Statistics")
 
@@ -340,13 +395,11 @@ if uploaded_file is not None:
 
                     characters = len(extracted_text)
 
-                    lines = len(
-                        [
-                            line
-                            for line in extracted_text.splitlines()
-                            if line.strip()
-                        ]
-                    )
+                    lines = len([
+                        line
+                        for line in extracted_text.splitlines()
+                        if line.strip()
+                    ])
 
                     c1, c2, c3 = st.columns(3)
 
@@ -365,6 +418,7 @@ if uploaded_file is not None:
                         lines
                     )
 
+
                 else:
 
                     st.warning(
@@ -376,11 +430,21 @@ if uploaded_file is not None:
                         "or darker text."
                     )
 
+
+            except pytesseract.TesseractNotFoundError:
+
+                st.error(
+                    "Tesseract OCR is not installed or "
+                    "could not be located. Please check "
+                    "the deployment configuration."
+                )
+
             except Exception as error:
 
                 st.error(
                     f"❌ OCR Error: {error}"
                 )
+
 
 else:
 
@@ -408,6 +472,7 @@ else:
         """,
         unsafe_allow_html=True
     )
+
 
 # ============================================================
 # FOOTER
