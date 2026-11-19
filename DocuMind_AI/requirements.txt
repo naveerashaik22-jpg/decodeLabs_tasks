@@ -1,0 +1,8 @@
+streamlit>=1.50
+opencv-python-headless
+pytesseract
+numpy
+pandas
+Pillow
+PyMuPDF
+python-dateutil
